@@ -1,0 +1,148 @@
+
+<!-- CATEGORY FILTER RESULTS ex: http://base-template.squarespace.com/blog/?category=category1 -->
+
+{.section categoryFilter}
+  <div class="filter"><h3>Filtering by Category: {@|safe}</h3></div>
+{.end}
+
+<!-- TAG FILTER RESULTS ex: http://base-template.squarespace.com/blog/?tag=tag2 -->
+
+{.section tagFilter}
+  <div class="filter"><h3>Filtering by Tag: {@|safe}</h3></div>
+{.end}
+
+<!-- AUTHOR FILTER RESULTS ex: http://www.base-template.com/blog?author=4f046df4d09ae2cf23d1aaa2 -->
+
+{.if authorFilter}
+  <div class="filter"><h3>Filtering by Author: {author.displayName}</h3></div>
+{.end}
+
+<!--ITEM LOOP-->
+
+{.repeated section items}
+
+  <!--WRAPPER-->
+  
+  <article id="post-{id}" class="{@|item-classes}" data-item-id="{id}">
+
+    <!--POST TILE-->
+
+    <h1 class="title" data-content-field="title">
+      {.passthrough?}
+        <a href="{sourceUrl}" target="_blank">{title}</a>
+      {.or}
+        <a href="{fullUrl}">{title}</a>
+      {.end}
+    </h1>
+
+    <!--POST META-->
+    
+    <div class="post-meta author-date">
+      <p><a href="{fullUrl}">{addedOn|date %B %d, %Y}</a><span class="author"> &nbsp;/&nbsp; <a href="?author={author.id}">{author.displayName}</a></span>{.section sourceUrl} &nbsp;/&nbsp; <a href="{@}" class="source" target="_blank">Source</a>{.end}</p>
+    </div>
+
+    {.section promotedBlock}
+      <div class="promoted-content">{@}</div>
+    {.end}
+
+    <!--EXCERPT OR BODY-->
+
+    {.if excerpt}
+      <div class="body">
+        <div class="excerpt">
+          {excerpt}
+          <a class="link" href="{fullUrl}">Read More</a>
+        </div>
+      </div>
+    {.or}
+
+      <!--MAIN CONTENT-->
+
+      <div class="body">{body}</div>
+
+    {.end}
+
+    <!--BLOG INJECTION-->
+
+    <div class="post-injection">{postItemInjectCode}</div>    
+
+    <div class="post-meta">
+
+    <!--COMMENTS, SHARE, LIKE-->
+    <div class="comment-share-like">
+      {.comments?}
+        {.disqus?}
+          <a class="icon-comments" href="{fullUrl}#commentsWrapper" title="Comments"></a>
+        {.or}
+          <a class="icon-comments" href="{fullUrl}#commentsWrapper" title="Comments"></a>
+        {.end}
+      {.end}
+      <a class="icon-heart" title="Like this">{@|like-button}</a>
+      <a class="icon-share" title="Share">{@|social-button-inline}</a>
+    </div>
+    <div class="counts">
+      {.comments?}
+        {.if websiteSettings.disqusShortname}
+        <span class="comment-count"><a href="{fullUrl}#commentsWrapper">{@|comment-link}</a></span>
+        {.or}
+        <span class="comment-count"><a href="{fullUrl}#commentsWrapper">
+        {.section publicCommentCount}
+          {@} Comment{@|pluralize}
+          {.or}
+            Comment
+          {.end}
+        </a></span>
+        {.end}
+      {.end}
+      {.if websiteSettings.simpleLikingEnabled}<span class="like-counter">{likeCount} Likes</span>{.end}
+    </div>
+    {.if categories || tags} 
+      <div class="tags-cats">
+        <!--CATEGORIES-->
+        {.if categories}
+          <em>categories</em> / {.repeated section categories}
+            <a class="category" href="?category={@|url-encode}">{@}</a>{.alternates with},
+          {.end}
+          <br />
+        {.end}
+        {.if tags}
+          <!--TAGS-->
+          <em>tags</em> / {.repeated section tags}
+            <a class="tag" href="?tag={@|url-encode}">{@}</a>{.alternates with},
+          {.end}
+        {.end}
+      </div>
+    {.end}
+  </div>
+</article>
+
+  {.or}
+  <article>
+    <div class="body"><div class="sqs-layout sqs-grid-12 columns-12"><h2>No blog posts yet.</h2></div></div>
+
+  </article>
+{.end}
+  
+<!--PAGINATION-->
+  
+{.if pagination}
+  <nav class="pagination">
+
+    <!--OLDER PAGE-->
+
+    {.if pagination.prevPage}
+      <a href="{pagination.prevPageUrl}" class="newer">Newer</a>&nbsp; /&nbsp; 
+    {.or}
+      <span class="disabled newer">Newer</span>&nbsp; /&nbsp; 
+    {.end}
+
+    <!--NEWER PAGE-->
+
+    {.if pagination.nextPage}
+      <a href="{pagination.nextPageUrl}" class="older">Older</a>
+    {.or}
+      <span class="disabled older">Older</span>
+    {.end}
+
+  </nav>
+{.end}

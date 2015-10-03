@@ -1,0 +1,54 @@
+
+<nav id="main-navigation" data-content-field="navigation-mainNav">
+  <ul class="cf">
+    {.repeated section items}
+      {.folder?}
+        <li class="folder{.if folderActive} active-folder{.end}">
+
+            <!--FOLDER-->
+
+            <div class="folder-parent">
+              <a aria-haspopup="true">{collection.navigationTitle}</a>
+              <div class="folder-child-wrapper">
+                <ul class="folder-child">
+
+                  {.repeated section items}
+
+                    {.collection?}
+                      <li class="{.section active} active-link{.end}">
+                        <a href="{collection.fullUrl}">
+                          {collection.navigationTitle}
+                        </a>
+                      </li>
+                    {.end}
+
+                    {.section externalLink}
+                      <li>
+                        <a href="{url}"{.section newWindow} target="_blank"{.end}>
+                          {title}
+                        </a>
+                      </li>
+                    {.end}
+                  {.end}
+
+                </ul>
+              </div>
+            </div>
+          </li>
+          {.or}
+
+            {.section collection}
+              <li class="{.if active} active-link{.end}"><a href="{fullUrl}">{navigationTitle}</a></li>
+            {.end}
+
+            {.section externalLink}
+              <li class="{.if active} active-link{.end}"><a href="{url}"{.section newWindow} target="_blank"{.end}>
+                {title}
+              </a></li>
+            {.end}
+
+          {.end}
+        
+    {.end}
+  </ul>
+</nav>
