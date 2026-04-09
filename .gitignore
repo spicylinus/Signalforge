@@ -3,3 +3,23 @@ sftp-config.json
 default.preset
 /presets/default.preset
 presets/default.preset
+
+# Next.js
+.next/
+out/
+build/
+node_modules/
+.pnpm-store/
+
+# Environment secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Drizzle migrations output (keep schema, ignore lock)
+lib/db/migrations/meta/
+
+# OS / Editor
+*.log
+.vscode/
+.idea/
