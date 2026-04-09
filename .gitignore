@@ -19,6 +19,9 @@ node_modules/
 # Drizzle migrations output (keep schema, ignore lock)
 lib/db/migrations/meta/
 
+# TypeScript build cache
+tsconfig.tsbuildinfo
+
 # OS / Editor
 *.log
 .vscode/
