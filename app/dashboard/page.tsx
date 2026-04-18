@@ -102,6 +102,7 @@ export default async function DashboardPage() {
               <ContentCard
                 key={content.id}
                 content={content}
+                jobId={job.id}
                 jobType={job.type}
                 brandName={brand.name}
                 platform={content.platform}

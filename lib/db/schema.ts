@@ -97,6 +97,24 @@ export const fanbasisEvents = pgTable("cf_fanbasis_events", {
   processedAt: timestamp("processed_at").defaultNow().notNull(),
 });
 
+export const contentEventTypeEnum = pgEnum("cf_content_event_type", [
+  "copy",
+  "download",
+  "regenerate",
+]);
+
+export const contentEvents = pgTable("cf_content_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  contentId: uuid("content_id")
+    .notNull()
+    .references(() => generatedContent.id, { onDelete: "cascade" }),
+  customerId: uuid("customer_id")
+    .notNull()
+    .references(() => customers.id, { onDelete: "cascade" }),
+  eventType: contentEventTypeEnum("event_type").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ── Relations ─────────────────────────────────────────────────────────────────
 
 export const customersRelations = relations(customers, ({ many }) => ({
@@ -121,10 +139,22 @@ export const contentJobsRelations = relations(contentJobs, ({ one, many }) => ({
 
 export const generatedContentRelations = relations(
   generatedContent,
-  ({ one }) => ({
+  ({ one, many }) => ({
     job: one(contentJobs, {
       fields: [generatedContent.jobId],
       references: [contentJobs.id],
     }),
+    events: many(contentEvents),
   })
 );
+
+export const contentEventsRelations = relations(contentEvents, ({ one }) => ({
+  content: one(generatedContent, {
+    fields: [contentEvents.contentId],
+    references: [generatedContent.id],
+  }),
+  customer: one(customers, {
+    fields: [contentEvents.customerId],
+    references: [customers.id],
+  }),
+}));

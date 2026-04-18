@@ -10,6 +10,7 @@ type Props = {
     wordCount: number | null;
     createdAt: Date;
   };
+  jobId: string;
   jobType: string;
   brandName: string;
   platform: string | null;
@@ -28,14 +29,28 @@ const PLATFORM_EMOJI: Record<string, string> = {
   email: "📧",
 };
 
-export default function ContentCard({ content, jobType, brandName, platform }: Props) {
+async function logEvent(contentId: string, eventType: "copy" | "download" | "regenerate") {
+  try {
+    await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contentId, eventType }),
+    });
+  } catch {
+    // fire-and-forget — never block the user action on a logging failure
+  }
+}
+
+export default function ContentCard({ content, jobId, jobType, brandName, platform }: Props) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   function handleCopy() {
     navigator.clipboard.writeText(content.body);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    logEvent(content.id, "copy");
   }
 
   function handleDownload() {
@@ -46,6 +61,23 @@ export default function ContentCard({ content, jobType, brandName, platform }: P
     a.download = `${(content.title ?? jobType).replace(/\s+/g, "-").toLowerCase()}.md`;
     a.click();
     URL.revokeObjectURL(url);
+    logEvent(content.id, "download");
+  }
+
+  async function handleRegenerate() {
+    setRegenerating(true);
+    logEvent(content.id, "regenerate");
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId }),
+      });
+      if (!res.ok) throw new Error("Generation failed");
+      window.location.reload();
+    } catch {
+      setRegenerating(false);
+    }
   }
 
   const preview = content.body.slice(0, 200) + (content.body.length > 200 ? "…" : "");
@@ -92,7 +124,7 @@ export default function ContentCard({ content, jobType, brandName, platform }: P
           </div>
         </div>
       </div>
-      <div className="border-t border-gray-50 px-6 py-3 flex gap-3">
+      <div className="border-t border-gray-50 px-6 py-3 flex gap-3 items-center">
         <button
           onClick={handleCopy}
           className="text-xs font-medium text-gray-600 hover:text-gray-900 transition"
@@ -104,6 +136,13 @@ export default function ContentCard({ content, jobType, brandName, platform }: P
           className="text-xs font-medium text-gray-600 hover:text-gray-900 transition"
         >
           Download .md
+        </button>
+        <button
+          onClick={handleRegenerate}
+          disabled={regenerating}
+          className="text-xs font-medium text-gray-400 hover:text-gray-700 transition disabled:opacity-50"
+        >
+          {regenerating ? "Regenerating…" : "Regenerate"}
         </button>
         <span className="text-xs text-gray-300 ml-auto">
           {new Date(content.createdAt).toLocaleDateString()}
