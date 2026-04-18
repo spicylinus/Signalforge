@@ -1,17 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
-import {
-  brands,
-  contentJobs,
-  generatedContent,
-} from "@/lib/db/schema";
-import { eq, and, lte } from "drizzle-orm";
+import { brands, contentJobs, generatedContent } from "@/lib/db/schema";
+import { eq, and, lte, desc } from "drizzle-orm";
 import { buildBlogPrompt, buildNewsletterPrompt, buildSocialPrompt } from "./prompts";
 import type { Brand, GeneratedResult, JobType } from "./types";
 
-const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY from env
+const anthropic = new Anthropic();
 
-const PLATFORM_ROTATION: ("linkedin" | "twitter" | "instagram")[] = [
+const PLATFORMS: ("linkedin" | "twitter" | "instagram")[] = [
   "linkedin",
   "twitter",
   "instagram",
@@ -19,10 +15,10 @@ const PLATFORM_ROTATION: ("linkedin" | "twitter" | "instagram")[] = [
   "twitter",
 ];
 
-async function callClaude(prompt: string): Promise<string> {
+async function callClaude(prompt: string, maxTokens = 4096): Promise<string> {
   const message = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2048,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   });
   const block = message.content[0];
@@ -39,10 +35,26 @@ function countWords(text: string): number {
   return text.trim().split(/\s+/).length;
 }
 
-export async function generateForJob(
-  jobId: string
-): Promise<GeneratedResult> {
-  // Mark job as running
+async function countBrandJobs(brandId: string, type: JobType): Promise<number> {
+  const rows = await db
+    .select({ id: contentJobs.id })
+    .from(contentJobs)
+    .where(and(eq(contentJobs.brandId, brandId), eq(contentJobs.type, type)));
+  return rows.length;
+}
+
+async function getRecentBlogTitles(brandId: string): Promise<string[]> {
+  const rows = await db
+    .select({ title: generatedContent.title })
+    .from(generatedContent)
+    .innerJoin(contentJobs, eq(generatedContent.jobId, contentJobs.id))
+    .where(and(eq(contentJobs.brandId, brandId), eq(contentJobs.type, "blog")))
+    .orderBy(desc(generatedContent.createdAt))
+    .limit(4);
+  return rows.map((r) => r.title).filter((t): t is string => t !== null);
+}
+
+export async function generateForJob(jobId: string): Promise<GeneratedResult> {
   await db
     .update(contentJobs)
     .set({ status: "running", startedAt: new Date() })
@@ -73,13 +85,18 @@ export async function generateForJob(
       topics: brand.topics,
       targetAudience: brand.targetAudience,
       sampleContent: brand.sampleContent,
+      websiteUrl: brand.websiteUrl,
     };
 
     let result: GeneratedResult;
 
     switch (job.type as JobType) {
       case "blog": {
-        const content = await callClaude(buildBlogPrompt(brandData));
+        const jobIndex = await countBrandJobs(brand.id, "blog");
+        // Deterministic rotation through topics — no random repeats within a cycle
+        const topic = brandData.topics[jobIndex % brandData.topics.length];
+        const recentTitles = await getRecentBlogTitles(brand.id);
+        const content = await callClaude(buildBlogPrompt(brandData, topic, recentTitles));
         result = {
           title: extractTitle(content),
           body: content,
@@ -89,25 +106,36 @@ export async function generateForJob(
         break;
       }
       case "social": {
-        // Rotate through platforms based on job creation order
-        const jobCount = await db
-          .select()
-          .from(contentJobs)
-          .where(and(eq(contentJobs.brandId, brand.id), eq(contentJobs.type, "social")));
-        const platform = PLATFORM_ROTATION[jobCount.length % PLATFORM_ROTATION.length];
-        const content = await callClaude(buildSocialPrompt(brandData, platform));
+        const jobIndex = await countBrandJobs(brand.id, "social");
+        const platform = PLATFORMS[jobIndex % PLATFORMS.length];
+        const topic = brandData.topics[jobIndex % brandData.topics.length];
+        let content = await callClaude(buildSocialPrompt(brandData, platform, topic), 512);
+        // Twitter hard limit — re-prompt once if over
+        if (platform === "twitter" && content.replace(/\s+/g, " ").trim().length > 280) {
+          content = await callClaude(
+            `Shorten this tweet to strictly under 280 characters. Keep the core message and hashtags.\n\n${content}`,
+            256
+          );
+        }
         result = {
           title: null,
-          body: content,
+          body: content.trim(),
           platform,
           wordCount: countWords(content),
         };
         break;
       }
       case "newsletter": {
-        const content = await callClaude(buildNewsletterPrompt(brandData));
+        const jobIndex = await countBrandJobs(brand.id, "newsletter");
+        // Rotate the 3-topic window through the full topic list each month
+        const t = brandData.topics;
+        const start = (jobIndex * 3) % t.length;
+        const topics = [...t, ...t].slice(start, start + 3);
+        const content = await callClaude(buildNewsletterPrompt(brandData, topics));
         result = {
-          title: extractTitle(content) ?? "Monthly Newsletter",
+          title:
+            extractTitle(content) ??
+            `${new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })} Newsletter`,
           body: content,
           platform: "email",
           wordCount: countWords(content),
@@ -118,7 +146,6 @@ export async function generateForJob(
         throw new Error(`Unknown job type: ${job.type}`);
     }
 
-    // Save output and mark done
     await db.insert(generatedContent).values({
       jobId,
       title: result.title,
@@ -143,23 +170,11 @@ export async function generateForJob(
   }
 }
 
-/**
- * Process all pending jobs that are due now or overdue.
- * Called by Paperclip AI heartbeat or the scheduled API route.
- */
-export async function processPendingJobs(): Promise<{
-  processed: number;
-  failed: number;
-}> {
+export async function processPendingJobs(): Promise<{ processed: number; failed: number }> {
   const pending = await db
     .select()
     .from(contentJobs)
-    .where(
-      and(
-        eq(contentJobs.status, "pending"),
-        lte(contentJobs.scheduledAt, new Date())
-      )
-    );
+    .where(and(eq(contentJobs.status, "pending"), lte(contentJobs.scheduledAt, new Date())));
 
   let processed = 0;
   let failed = 0;

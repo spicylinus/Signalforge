@@ -6,6 +6,7 @@ export type Brand = {
   topics: string[];
   targetAudience: string;
   sampleContent: string | null;
+  websiteUrl: string | null;
 };
 
 export type JobType = "blog" | "social" | "newsletter";
