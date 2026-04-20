@@ -95,9 +95,10 @@ export async function runSignalAgent(): Promise<{
 
       processed++;
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
       await db
         .update(sfSignalQueue)
-        .set({ errorMessage: String(err) })
+        .set({ errorMessage: message })
         .where(eq(sfSignalQueue.id, item.id));
       errors++;
     }
