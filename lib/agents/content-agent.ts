@@ -1,9 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@/lib/db";
-import { brands, contentJobs, generatedContent } from "@/lib/db/schema";
+import { brands, contentJobs, distributionLog, distributionSettings, generatedContent } from "@/lib/db/schema";
 import { eq, and, lte, desc } from "drizzle-orm";
 import { buildBlogPrompt, buildNewsletterPrompt, buildSocialPrompt } from "./prompts";
 import type { Brand, GeneratedResult, JobType } from "./types";
+import { publishToWordPress } from "@/lib/integrations/wordpress";
 
 const anthropic = new Anthropic();
 
@@ -146,13 +147,49 @@ export async function generateForJob(jobId: string): Promise<GeneratedResult> {
         throw new Error(`Unknown job type: ${job.type}`);
     }
 
-    await db.insert(generatedContent).values({
-      jobId,
-      title: result.title,
-      body: result.body,
-      platform: result.platform,
-      wordCount: result.wordCount,
-    });
+    const [savedContent] = await db
+      .insert(generatedContent)
+      .values({
+        jobId,
+        title: result.title,
+        body: result.body,
+        platform: result.platform,
+        wordCount: result.wordCount,
+      })
+      .returning({ id: generatedContent.id });
+
+    if (job.type === "blog") {
+      const [settings] = await db
+        .select()
+        .from(distributionSettings)
+        .where(eq(distributionSettings.customerId, brand.customerId))
+        .limit(1);
+
+      if (settings?.autoPublishBlog) {
+        try {
+          const wpResult = await publishToWordPress(settings, {
+            title: result.title ?? "",
+            body: result.body,
+          });
+          await db.insert(distributionLog).values({
+            contentId: savedContent.id,
+            customerId: brand.customerId,
+            platform: "wordpress",
+            status: "success",
+            publishedUrl: wpResult.link,
+          });
+        } catch (distErr) {
+          // Never re-throw — distribution failure must not fail the content job
+          await db.insert(distributionLog).values({
+            contentId: savedContent.id,
+            customerId: brand.customerId,
+            platform: "wordpress",
+            status: "failed",
+            error: String(distErr).slice(0, 500),
+          });
+        }
+      }
+    }
 
     await db
       .update(contentJobs)

@@ -60,6 +60,7 @@ export default async function DashboardPage() {
         <Link href="/" className="text-lg font-black tracking-tight">ContentForge</Link>
         <div className="flex items-center gap-6 text-sm">
           <span className="text-gray-500">{session.user.email}</span>
+          <Link href="/dashboard/integrations" className="text-gray-600 hover:text-gray-900">Integrations</Link>
           <Link href="/dashboard/settings" className="text-gray-600 hover:text-gray-900">Settings</Link>
           <Link href="/api/auth/signout" className="text-gray-400 hover:text-gray-700">Sign out</Link>
         </div>

@@ -6,21 +6,25 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 function LoginForm() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const verified = searchParams.get("verify") === "1";
   const plan = searchParams.get("plan");
+  const founding = searchParams.get("founding");
+  const prefillEmail = searchParams.get("email") ?? "";
+
+  const [email, setEmail] = useState(prefillEmail);
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await signIn("email", {
-      email,
-      callbackUrl: plan ? `/onboarding?plan=${plan}` : "/dashboard",
-      redirect: false,
-    });
+    let callbackUrl = "/dashboard";
+    if (plan) {
+      callbackUrl = `/onboarding?plan=${plan}`;
+      if (founding === "1") callbackUrl += "&founding=1";
+    }
+    await signIn("email", { email, callbackUrl, redirect: false });
     setSent(true);
     setLoading(false);
   }
