@@ -31,4 +31,14 @@ export const env = {
   get AUTH_SECRET() {
     return required("AUTH_SECRET");
   },
+  // Optional — required only when GSC integration is used
+  get GOOGLE_CLIENT_ID() {
+    return process.env.GOOGLE_CLIENT_ID ?? "";
+  },
+  get GOOGLE_CLIENT_SECRET() {
+    return process.env.GOOGLE_CLIENT_SECRET ?? "";
+  },
+  get NEXT_PUBLIC_APP_URL() {
+    return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  },
 } as const;

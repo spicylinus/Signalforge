@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   pgEnum,
+  real,
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
@@ -252,3 +253,111 @@ export const sfSettings = pgTable("sf_settings", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ── Content strategy tables ────────────────────────────────────────────────────
+
+export const funnelStageEnum = pgEnum("funnel_stage", [
+  "awareness",
+  "consideration",
+  "decision",
+]);
+
+export const contentJobStatusEnum = pgEnum("content_job_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const contentSourceEnum = pgEnum("content_source", ["gsc", "manual"]);
+
+export const sfBrands = pgTable("sf_brands", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id")
+    .notNull()
+    .unique()
+    .references(() => sfCustomers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  funnelStage: funnelStageEnum("funnel_stage").notNull().default("awareness"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const sfBrandTopics = pgTable(
+  "sf_brand_topics",
+  {
+    id: serial("id").primaryKey(),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => sfBrands.id, { onDelete: "cascade" }),
+    topic: text("topic").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("sfbt_brand_idx").on(t.brandId)]
+);
+
+export const sfGscConnections = pgTable("sf_gsc_connections", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id")
+    .notNull()
+    .unique()
+    .references(() => sfCustomers.id, { onDelete: "cascade" }),
+  siteUrl: text("site_url").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at").notNull(),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const sfGscQueries = pgTable(
+  "sf_gsc_queries",
+  {
+    id: serial("id").primaryKey(),
+    connectionId: integer("connection_id")
+      .notNull()
+      .references(() => sfGscConnections.id, { onDelete: "cascade" }),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => sfCustomers.id, { onDelete: "cascade" }),
+    query: text("query").notNull(),
+    clicks: integer("clicks").notNull().default(0),
+    impressions: integer("impressions").notNull().default(0),
+    ctr: real("ctr").notNull().default(0),
+    position: real("position").notNull().default(0),
+    periodStart: timestamp("period_start").notNull(),
+    periodEnd: timestamp("period_end").notNull(),
+    fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("sfgq_connection_idx").on(t.connectionId),
+    index("sfgq_customer_idx").on(t.customerId),
+  ]
+);
+
+export const sfContentJobs = pgTable(
+  "sf_content_jobs",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => sfCustomers.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => sfBrands.id, { onDelete: "cascade" }),
+    targetQuery: text("target_query").notNull(),
+    funnelStage: funnelStageEnum("funnel_stage").notNull(),
+    source: contentSourceEnum("source").notNull(),
+    status: contentJobStatusEnum("status").notNull().default("pending"),
+    generatedContent: text("generated_content"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (t) => [
+    index("sfcj_customer_idx").on(t.customerId),
+    index("sfcj_brand_idx").on(t.brandId),
+    index("sfcj_status_idx").on(t.status),
+  ]
+);
