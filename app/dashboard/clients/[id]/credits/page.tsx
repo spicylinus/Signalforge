@@ -3,6 +3,8 @@ import { sfCreditAccounts, sfCreditPurchases, sfCustomers } from "@/lib/db/schem
 import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { addCredits, updateLowBalanceThreshold } from "@/lib/actions/credits";
+import { StripeCheckoutButton } from "./stripe-checkout-button";
+import { paymentProcessor } from "@/lib/payments";
 
 const BONUS_TIERS = [
   { min: 500000, label: "$5,000+", pct: "15%" },
@@ -12,10 +14,13 @@ const BONUS_TIERS = [
 
 export default async function CreditsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ payment?: string }>;
 }) {
   const { id } = await params;
+  const { payment } = await searchParams;
   const customerId = parseInt(id, 10);
 
   const [customer, account, purchases] = await Promise.all([
@@ -36,8 +41,24 @@ export default async function CreditsPage({
 
   const isLow = account.balanceCents < account.lowBalanceThresholdCents;
 
+  const stripeActive = paymentProcessor !== null;
+
   return (
     <div className="space-y-6">
+      {/* Payment status flash */}
+      {payment && (
+        <div
+          className={`rounded-md px-4 py-3 text-sm ${
+            payment === "success"
+              ? "bg-green-50 text-green-700"
+              : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {payment === "success" && "Payment completed — credits will appear shortly."}
+          {payment === "cancelled" && "Payment was cancelled."}
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid grid-cols-3 gap-4">
         {[
@@ -73,7 +94,7 @@ export default async function CreditsPage({
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className={`grid gap-6 ${stripeActive ? "grid-cols-3" : "grid-cols-2"}`}>
         {/* Add credits */}
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <h2 className="text-base font-semibold text-gray-900 mb-1">
@@ -131,6 +152,19 @@ export default async function CreditsPage({
           </form>
         </div>
 
+        {/* Stripe checkout link */}
+        {stripeActive && (
+          <div className="bg-white rounded-lg border border-gray-200 p-5">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">
+              Send Stripe Payment Link
+            </h2>
+            <div className="text-xs text-gray-400 mb-4">
+              Generates a Stripe Checkout link. Credits load automatically on payment.
+            </div>
+            <StripeCheckoutButton customerId={customerId} />
+          </div>
+        )}
+
         {/* Low-balance threshold */}
         <div className="bg-white rounded-lg border border-gray-200 p-5">
           <h2 className="text-base font-semibold text-gray-900 mb-1">
@@ -185,6 +219,7 @@ export default async function CreditsPage({
                   <th className="text-left px-4 py-2 font-medium text-gray-600">Date</th>
                   <th className="text-right px-4 py-2 font-medium text-gray-600">Amount</th>
                   <th className="text-right px-4 py-2 font-medium text-gray-600">Bonus</th>
+                  <th className="text-left px-4 py-2 font-medium text-gray-600">Via</th>
                   <th className="text-left px-4 py-2 font-medium text-gray-600">Reference</th>
                   <th className="text-left px-4 py-2 font-medium text-gray-600">By</th>
                 </tr>
@@ -202,6 +237,17 @@ export default async function CreditsPage({
                       {p.bonusCents > 0
                         ? `+$${(p.bonusCents / 100).toFixed(2)}`
                         : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-xs">
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-xs ${
+                          p.processor === "stripe"
+                            ? "bg-indigo-50 text-indigo-700"
+                            : "bg-gray-100 text-gray-500"
+                        }`}
+                      >
+                        {p.processor ?? "manual"}
+                      </span>
                     </td>
                     <td className="px-4 py-2 text-gray-500 text-xs">
                       {p.paymentReference ?? "—"}

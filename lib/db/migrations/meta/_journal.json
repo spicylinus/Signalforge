@@ -8,6 +8,13 @@
       "when": 1777089733737,
       "tag": "0000_noisy_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777092896497,
+      "tag": "0001_minor_kabuki",
+      "breakpoints": true
     }
   ]
 }

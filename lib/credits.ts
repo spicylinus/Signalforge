@@ -66,7 +66,8 @@ export async function loadCredits(
   customerId: number,
   amountCents: number,
   paymentReference: string,
-  loadedBy: string
+  loadedBy: string,
+  processor = "manual"
 ): Promise<{ balanceCents: number; bonusCents: number }> {
   const bonusCents = computeBonus(amountCents);
   const totalCents = amountCents + bonusCents;
@@ -77,6 +78,7 @@ export async function loadCredits(
     bonusCents,
     paymentReference,
     loadedBy,
+    processor,
   });
 
   const updated = await db

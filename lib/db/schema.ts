@@ -107,6 +107,8 @@ export const sfCustomers = pgTable("sf_customers", {
   leadGuaranteeDue: timestamp("lead_guarantee_due"),
   icpDescription: text("icp_description"),
   notes: text("notes"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -138,6 +140,7 @@ export const sfCreditPurchases = pgTable(
     bonusCents: integer("bonus_cents").notNull().default(0),
     paymentReference: text("payment_reference"),
     loadedBy: text("loaded_by"),
+    processor: text("processor"),
     loadedAt: timestamp("loaded_at").notNull().defaultNow(),
   },
   (t) => [index("sfcp_customer_idx").on(t.customerId)]
@@ -360,4 +363,19 @@ export const sfContentJobs = pgTable(
     index("sfcj_brand_idx").on(t.brandId),
     index("sfcj_status_idx").on(t.status),
   ]
+);
+
+// ── Payment processor tables ───────────────────────────────────────────────────
+
+export const sfPaymentEvents = pgTable(
+  "sf_payment_events",
+  {
+    id: serial("id").primaryKey(),
+    processorEventId: text("processor_event_id").notNull().unique(),
+    type: text("type").notNull(),
+    customerId: integer("customer_id").references(() => sfCustomers.id),
+    amountCents: integer("amount_cents"),
+    processedAt: timestamp("processed_at").notNull().defaultNow(),
+  },
+  (t) => [index("sfpe_event_id_idx").on(t.processorEventId)]
 );

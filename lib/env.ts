@@ -41,4 +41,18 @@ export const env = {
   get NEXT_PUBLIC_APP_URL() {
     return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   },
+  // Optional — required only when Stripe integration is active
+  get STRIPE_SECRET_KEY() {
+    return process.env.STRIPE_SECRET_KEY ?? "";
+  },
+  get STRIPE_WEBHOOK_SECRET() {
+    return process.env.STRIPE_WEBHOOK_SECRET ?? "";
+  },
+  // Stripe Price IDs — one per plan/billing-cycle combination
+  get STRIPE_PRICE_FLOOR_MONTHLY() { return process.env.STRIPE_PRICE_FLOOR_MONTHLY ?? ""; },
+  get STRIPE_PRICE_FLOOR_ANNUAL() { return process.env.STRIPE_PRICE_FLOOR_ANNUAL ?? ""; },
+  get STRIPE_PRICE_GUIDED_MONTHLY() { return process.env.STRIPE_PRICE_GUIDED_MONTHLY ?? ""; },
+  get STRIPE_PRICE_GUIDED_ANNUAL() { return process.env.STRIPE_PRICE_GUIDED_ANNUAL ?? ""; },
+  get STRIPE_PRICE_ENTERPRISE_MONTHLY() { return process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY ?? ""; },
+  get STRIPE_PRICE_ENTERPRISE_ANNUAL() { return process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL ?? ""; },
 } as const;
