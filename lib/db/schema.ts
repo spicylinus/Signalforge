@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   pgEnum,
+  real,
   index,
   primaryKey,
 } from "drizzle-orm/pg-core";
@@ -106,6 +107,9 @@ export const sfCustomers = pgTable("sf_customers", {
   leadGuaranteeDue: timestamp("lead_guarantee_due"),
   icpDescription: text("icp_description"),
   notes: text("notes"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePaymentMethodSaved: boolean("stripe_payment_method_saved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -123,6 +127,11 @@ export const sfCreditAccounts = pgTable("sf_credit_accounts", {
     .notNull()
     .default(10000),
   lastAlertSentAt: timestamp("last_alert_sent_at"),
+  // Auto top-up
+  topUpMode: text("top_up_mode").notNull().default("manual"), // 'manual' | 'auto'
+  autoTopUpTriggerCents: integer("auto_top_up_trigger_cents"),
+  autoTopUpAmountCents: integer("auto_top_up_amount_cents"),
+  lastAutoTopUpAt: timestamp("last_auto_top_up_at"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
@@ -137,6 +146,7 @@ export const sfCreditPurchases = pgTable(
     bonusCents: integer("bonus_cents").notNull().default(0),
     paymentReference: text("payment_reference"),
     loadedBy: text("loaded_by"),
+    processor: text("processor"),
     loadedAt: timestamp("loaded_at").notNull().defaultNow(),
   },
   (t) => [index("sfcp_customer_idx").on(t.customerId)]
@@ -252,3 +262,126 @@ export const sfSettings = pgTable("sf_settings", {
   value: text("value").notNull(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// ── Content strategy tables ────────────────────────────────────────────────────
+
+export const funnelStageEnum = pgEnum("funnel_stage", [
+  "awareness",
+  "consideration",
+  "decision",
+]);
+
+export const contentJobStatusEnum = pgEnum("content_job_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const contentSourceEnum = pgEnum("content_source", ["gsc", "manual"]);
+
+export const sfBrands = pgTable("sf_brands", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id")
+    .notNull()
+    .unique()
+    .references(() => sfCustomers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  funnelStage: funnelStageEnum("funnel_stage").notNull().default("awareness"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const sfBrandTopics = pgTable(
+  "sf_brand_topics",
+  {
+    id: serial("id").primaryKey(),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => sfBrands.id, { onDelete: "cascade" }),
+    topic: text("topic").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("sfbt_brand_idx").on(t.brandId)]
+);
+
+export const sfGscConnections = pgTable("sf_gsc_connections", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id")
+    .notNull()
+    .unique()
+    .references(() => sfCustomers.id, { onDelete: "cascade" }),
+  siteUrl: text("site_url").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  tokenExpiresAt: timestamp("token_expires_at").notNull(),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const sfGscQueries = pgTable(
+  "sf_gsc_queries",
+  {
+    id: serial("id").primaryKey(),
+    connectionId: integer("connection_id")
+      .notNull()
+      .references(() => sfGscConnections.id, { onDelete: "cascade" }),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => sfCustomers.id, { onDelete: "cascade" }),
+    query: text("query").notNull(),
+    clicks: integer("clicks").notNull().default(0),
+    impressions: integer("impressions").notNull().default(0),
+    ctr: real("ctr").notNull().default(0),
+    position: real("position").notNull().default(0),
+    periodStart: timestamp("period_start").notNull(),
+    periodEnd: timestamp("period_end").notNull(),
+    fetchedAt: timestamp("fetched_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("sfgq_connection_idx").on(t.connectionId),
+    index("sfgq_customer_idx").on(t.customerId),
+  ]
+);
+
+export const sfContentJobs = pgTable(
+  "sf_content_jobs",
+  {
+    id: serial("id").primaryKey(),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => sfCustomers.id, { onDelete: "cascade" }),
+    brandId: integer("brand_id")
+      .notNull()
+      .references(() => sfBrands.id, { onDelete: "cascade" }),
+    targetQuery: text("target_query").notNull(),
+    funnelStage: funnelStageEnum("funnel_stage").notNull(),
+    source: contentSourceEnum("source").notNull(),
+    status: contentJobStatusEnum("status").notNull().default("pending"),
+    generatedContent: text("generated_content"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    completedAt: timestamp("completed_at"),
+  },
+  (t) => [
+    index("sfcj_customer_idx").on(t.customerId),
+    index("sfcj_brand_idx").on(t.brandId),
+    index("sfcj_status_idx").on(t.status),
+  ]
+);
+
+// ── Payment processor tables ───────────────────────────────────────────────────
+
+export const sfPaymentEvents = pgTable(
+  "sf_payment_events",
+  {
+    id: serial("id").primaryKey(),
+    processorEventId: text("processor_event_id").notNull().unique(),
+    type: text("type").notNull(),
+    customerId: integer("customer_id").references(() => sfCustomers.id),
+    amountCents: integer("amount_cents"),
+    processedAt: timestamp("processed_at").notNull().defaultNow(),
+  },
+  (t) => [index("sfpe_event_id_idx").on(t.processorEventId)]
+);

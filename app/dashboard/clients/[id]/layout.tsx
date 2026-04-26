@@ -24,6 +24,7 @@ export default async function ClientLayout({
     { label: "Overview", href: `/dashboard/clients/${id}` },
     { label: "Campaigns", href: `/dashboard/clients/${id}/campaigns` },
     { label: "Credits", href: `/dashboard/clients/${id}/credits` },
+    { label: "Content", href: `/dashboard/clients/${id}/content` },
   ];
 
   return (
