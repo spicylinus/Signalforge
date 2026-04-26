@@ -7,7 +7,8 @@ export type BillingEventType =
   | "subscription.cancelled"
   | "subscription.payment_failed"
   | "credit_payment.succeeded"
-  | "setup_fee.succeeded";
+  | "setup_fee.succeeded"
+  | "auto_topup.succeeded";
 
 export interface BillingEvent {
   type: BillingEventType | string;
@@ -57,8 +58,11 @@ export interface PaymentProcessor {
   ensureCustomer(email: string, name: string, internalCustomerId: number): Promise<string>;
   createSubscription(params: SubscriptionParams): Promise<SubscriptionResult>;
   cancelSubscription(processorSubscriptionId: string): Promise<void>;
+  /** Creates a checkout session that also saves the card for future off-session charges. */
   createCreditCheckout(params: CreditCheckoutParams): Promise<CheckoutResult>;
   createSetupFeeCheckout(params: SetupFeeCheckoutParams): Promise<CheckoutResult>;
+  /** Charge the customer's saved payment method off-session for an automatic top-up. */
+  chargeAutoTopUp(processorCustomerId: string, amountCents: number, internalCustomerId: number): Promise<string>;
   /** Verify webhook signature and return a normalised BillingEvent. Throws on invalid signature. */
   constructWebhookEvent(rawBody: Buffer, signature: string): BillingEvent;
 }

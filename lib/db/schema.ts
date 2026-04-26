@@ -109,6 +109,7 @@ export const sfCustomers = pgTable("sf_customers", {
   notes: text("notes"),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  stripePaymentMethodSaved: boolean("stripe_payment_method_saved").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -126,6 +127,11 @@ export const sfCreditAccounts = pgTable("sf_credit_accounts", {
     .notNull()
     .default(10000),
   lastAlertSentAt: timestamp("last_alert_sent_at"),
+  // Auto top-up
+  topUpMode: text("top_up_mode").notNull().default("manual"), // 'manual' | 'auto'
+  autoTopUpTriggerCents: integer("auto_top_up_trigger_cents"),
+  autoTopUpAmountCents: integer("auto_top_up_amount_cents"),
+  lastAutoTopUpAt: timestamp("last_auto_top_up_at"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

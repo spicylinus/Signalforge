@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sfCustomers, sfPaymentEvents } from "@/lib/db/schema";
+import { sfCustomers, sfCreditAccounts, sfPaymentEvents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { paymentProcessor } from "@/lib/payments";
 import { loadCredits } from "@/lib/credits";
@@ -50,6 +50,28 @@ export async function POST(req: NextRequest) {
             "stripe",
             "stripe"
           );
+          // Mark card as saved — checkout used setup_future_usage: off_session
+          await db
+            .update(sfCustomers)
+            .set({ stripePaymentMethodSaved: true, updatedAt: new Date() })
+            .where(eq(sfCustomers.id, customerId));
+        }
+        break;
+      }
+
+      case "auto_topup.succeeded": {
+        if (customerId && event.amountCents) {
+          await loadCredits(
+            customerId,
+            event.amountCents,
+            event.processorEventId,
+            "stripe (auto)",
+            "stripe"
+          );
+          await db
+            .update(sfCreditAccounts)
+            .set({ lastAutoTopUpAt: new Date(), updatedAt: new Date() })
+            .where(eq(sfCreditAccounts.customerId, customerId));
         }
         break;
       }

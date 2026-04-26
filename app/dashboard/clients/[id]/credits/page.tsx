@@ -2,8 +2,9 @@ import { db } from "@/lib/db";
 import { sfCreditAccounts, sfCreditPurchases, sfCustomers } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { addCredits, updateLowBalanceThreshold } from "@/lib/actions/credits";
+import { addCredits } from "@/lib/actions/credits";
 import { StripeCheckoutButton } from "./stripe-checkout-button";
+import { TopUpSettingsPanel } from "./top-up-settings";
 import { paymentProcessor } from "@/lib/payments";
 
 const BONUS_TIERS = [
@@ -26,7 +27,7 @@ export default async function CreditsPage({
   const [customer, account, purchases] = await Promise.all([
     db.query.sfCustomers.findFirst({
       where: eq(sfCustomers.id, customerId),
-      columns: { id: true },
+      columns: { id: true, stripePaymentMethodSaved: true },
     }),
     db.query.sfCreditAccounts.findFirst({
       where: eq(sfCreditAccounts.customerId, customerId),
@@ -165,43 +166,15 @@ export default async function CreditsPage({
           </div>
         )}
 
-        {/* Low-balance threshold */}
-        <div className="bg-white rounded-lg border border-gray-200 p-5">
-          <h2 className="text-base font-semibold text-gray-900 mb-1">
-            Low-Balance Alert
-          </h2>
-          <p className="text-xs text-gray-400 mb-4">
-            Alert fires when balance drops below this threshold. Current:{" "}
-            <strong className="text-gray-700">
-              ${(account.lowBalanceThresholdCents / 100).toFixed(0)}
-            </strong>
-          </p>
-          <form
-            action={updateLowBalanceThreshold.bind(null, customerId)}
-            className="flex gap-3 items-end"
-          >
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                New threshold ($)
-              </label>
-              <input
-                name="threshold_dollars"
-                type="number"
-                step="1"
-                min="0"
-                required
-                defaultValue={(account.lowBalanceThresholdCents / 100).toFixed(0)}
-                className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-              />
-            </div>
-            <button
-              type="submit"
-              className="bg-white border border-gray-300 rounded px-4 py-2 text-sm hover:bg-gray-50"
-            >
-              Update
-            </button>
-          </form>
-        </div>
+        {/* Top-up settings */}
+        <TopUpSettingsPanel
+          customerId={customerId}
+          topUpMode={account.topUpMode}
+          autoTopUpTriggerCents={account.autoTopUpTriggerCents ?? null}
+          autoTopUpAmountCents={account.autoTopUpAmountCents ?? null}
+          lowBalanceThresholdCents={account.lowBalanceThresholdCents}
+          cardSaved={customer.stripePaymentMethodSaved}
+        />
       </div>
 
       {/* Purchase history */}

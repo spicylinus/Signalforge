@@ -88,6 +88,8 @@ export class StripeProcessor implements PaymentProcessor {
           quantity: 1,
         },
       ],
+      // Save the card so future auto top-ups can charge off-session
+      payment_intent_data: { setup_future_usage: "off_session" },
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
       metadata: {
@@ -96,6 +98,25 @@ export class StripeProcessor implements PaymentProcessor {
       },
     });
     return { url: session.url!, sessionId: session.id };
+  }
+
+  async chargeAutoTopUp(
+    processorCustomerId: string,
+    amountCents: number,
+    internalCustomerId: number
+  ): Promise<string> {
+    const pi = await this.stripe.paymentIntents.create({
+      amount: amountCents,
+      currency: "usd",
+      customer: processorCustomerId,
+      confirm: true,
+      off_session: true,
+      metadata: {
+        sf_customer_id: String(internalCustomerId),
+        type: "auto_topup",
+      },
+    });
+    return pi.id;
   }
 
   async createSetupFeeCheckout(params: SetupFeeCheckoutParams): Promise<CheckoutResult> {
@@ -201,15 +222,30 @@ export class StripeProcessor implements PaymentProcessor {
         };
       }
 
-      default:
+      case "payment_intent.succeeded": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        if (pi.metadata?.type !== "auto_topup") break;
         return {
-          type: event.type,
+          type: "auto_topup.succeeded",
           processorEventId: event.id,
-          internalCustomerId: null,
-          amountCents: null,
+          internalCustomerId: extractCustomerId(pi.metadata),
+          amountCents: pi.amount,
           processorSubscriptionId: null,
           raw: event,
         };
+      }
+
+      default:
+        break;
     }
+
+    return {
+      type: event.type,
+      processorEventId: event.id,
+      internalCustomerId: null,
+      amountCents: null,
+      processorSubscriptionId: null,
+      raw: event,
+    };
   }
 }
