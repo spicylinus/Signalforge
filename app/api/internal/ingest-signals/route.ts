@@ -17,3 +17,14 @@ export async function POST(req: NextRequest) {
   const result = await runSignalAgent();
   return NextResponse.json(result);
 }
+
+// Vercel Cron Job handler — fires GET every 15 minutes
+export async function GET(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || req.headers.get("authorization") !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const result = await runSignalAgent();
+  return NextResponse.json(result);
+}
