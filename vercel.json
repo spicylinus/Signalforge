@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/ingest-signals",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/internal/score-leads",
+      "schedule": "0 * * * *"
+    }
+  ]
+}
