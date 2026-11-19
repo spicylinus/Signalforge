@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm build
+        env:
+          # Provide dummy values so env validation passes during build
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+          ANTHROPIC_API_KEY: sk-ant-dummy
+          INTERNAL_AGENT_SECRET: dummy
+          MAKE_WEBHOOK_SECRET: dummy
+          STAFF_API_KEY: dummy
+          AUTH_SECRET: dummy
+          AUTH_RESEND_KEY: re_dummy
+          AUTH_URL: http://localhost:3000
