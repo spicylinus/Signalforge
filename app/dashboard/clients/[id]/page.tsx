@@ -5,9 +5,21 @@ import {
   sfLeads,
   sfLeadScores,
 } from "@/lib/db/schema";
-import { eq, desc, count, sql } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { paymentProcessor } from "@/lib/payments";
+import {
+  createOrUpdateSubscription,
+  cancelCustomerSubscription,
+} from "@/lib/actions/billing";
+
+const SUB_STATUS_STYLE: Record<string, string> = {
+  active: "bg-green-50 text-green-700",
+  trialing: "bg-blue-50 text-blue-700",
+  paused: "bg-amber-50 text-amber-700",
+  cancelled: "bg-red-50 text-red-700",
+};
 
 const SEGMENT_COLOR: Record<string, string> = {
   A: "bg-green-100 text-green-700",
@@ -18,10 +30,13 @@ const SEGMENT_COLOR: Record<string, string> = {
 
 export default async function ClientOverviewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ payment?: string }>;
 }) {
   const { id } = await params;
+  const { payment } = await searchParams;
   const customerId = parseInt(id, 10);
 
   const [customer, creditAccount, recentLeads, segmentRows, scoredCount] =
@@ -48,6 +63,7 @@ export default async function ClientOverviewPage({
 
   if (!customer) notFound();
 
+  const stripeActive = paymentProcessor !== null;
   const totalLeads = recentLeads.length; // approximate for display
   const scored = scoredCount[0]?.cnt ?? 0;
   const calibrationPct = Math.min(100, Math.round((scored / 200) * 100));
@@ -63,6 +79,20 @@ export default async function ClientOverviewPage({
 
   return (
     <div className="space-y-6">
+      {/* Payment flash */}
+      {payment && (
+        <div
+          className={`rounded-md px-4 py-3 text-sm ${
+            payment === "setup_success"
+              ? "bg-green-50 text-green-700"
+              : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {payment === "setup_success" && "Setup fee payment completed."}
+          {payment === "cancelled" && "Payment was cancelled."}
+        </div>
+      )}
+
       {/* Credit summary */}
       <div className="grid grid-cols-4 gap-4">
         {[
@@ -144,6 +174,55 @@ export default async function ClientOverviewPage({
           </div>
         )}
       </div>
+
+      {/* Subscription */}
+      {stripeActive && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-gray-500 mb-1">Subscription</div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  SUB_STATUS_STYLE[customer.subscriptionStatus] ??
+                  "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {customer.subscriptionStatus}
+              </span>
+              <span className="text-sm text-gray-700 font-medium capitalize">
+                {customer.plan} · {customer.billingCycle}
+              </span>
+              {customer.isFounder && (
+                <span className="text-xs bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">
+                  Founder locked
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {customer.stripeSubscriptionId &&
+            customer.subscriptionStatus !== "cancelled" ? (
+              <form action={cancelCustomerSubscription.bind(null, customerId)}>
+                <button
+                  type="submit"
+                  className="text-xs border border-gray-300 rounded px-3 py-1.5 text-red-600 hover:bg-red-50"
+                >
+                  Cancel subscription
+                </button>
+              </form>
+            ) : (
+              <form action={createOrUpdateSubscription.bind(null, customerId)}>
+                <button
+                  type="submit"
+                  className="text-xs bg-gray-900 text-white rounded px-3 py-1.5 hover:bg-gray-800"
+                >
+                  Create subscription
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Recent leads */}
       <div>

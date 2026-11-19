@@ -5,8 +5,9 @@ import {
   sfCustomers,
   sfCreditAccounts,
 } from "@/lib/db/schema";
-import { eq, isNull, and } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { debitCredits, checkLowBalance } from "@/lib/credits";
+import { paymentProcessor } from "@/lib/payments";
 
 const WHOLESALE_COST_CENTS: Record<string, number> = {
   web_basic: 20,
@@ -41,6 +42,59 @@ function extractLeadFields(raw: Record<string, unknown>) {
   };
 }
 
+const AUTO_TOPUP_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes between auto top-ups
+
+async function maybeAutoTopUp(customerId: number): Promise<void> {
+  if (!paymentProcessor) return;
+
+  const [account, customer] = await Promise.all([
+    db.query.sfCreditAccounts.findFirst({
+      where: eq(sfCreditAccounts.customerId, customerId),
+    }),
+    db.query.sfCustomers.findFirst({
+      where: eq(sfCustomers.id, customerId),
+      columns: { stripeCustomerId: true, stripePaymentMethodSaved: true },
+    }),
+  ]);
+
+  if (
+    !account ||
+    account.topUpMode !== "auto" ||
+    !account.autoTopUpTriggerCents ||
+    !account.autoTopUpAmountCents
+  ) return;
+
+  if (account.balanceCents >= account.autoTopUpTriggerCents) return;
+
+  if (!customer?.stripeCustomerId || !customer.stripePaymentMethodSaved) return;
+
+  // Rate-limit: skip if a top-up fired within the cooldown window
+  if (
+    account.lastAutoTopUpAt &&
+    Date.now() - account.lastAutoTopUpAt.getTime() < AUTO_TOPUP_COOLDOWN_MS
+  ) return;
+
+  // Mark the attempt immediately to prevent concurrent retriggers
+  await db
+    .update(sfCreditAccounts)
+    .set({ lastAutoTopUpAt: new Date(), updatedAt: new Date() })
+    .where(eq(sfCreditAccounts.customerId, customerId));
+
+  try {
+    await paymentProcessor.chargeAutoTopUp(
+      customer.stripeCustomerId,
+      account.autoTopUpAmountCents,
+      customerId
+    );
+    console.log(
+      `[SignalAgent] Auto top-up triggered for customer ${customerId}: ` +
+      `$${(account.autoTopUpAmountCents / 100).toFixed(2)}`
+    );
+  } catch (err) {
+    console.error(`[SignalAgent] Auto top-up failed for customer ${customerId}:`, err);
+  }
+}
+
 export async function runSignalAgent(): Promise<{
   processed: number;
   errors: number;
@@ -73,7 +127,6 @@ export async function runSignalAgent(): Promise<{
 
       const { success } = await debitCredits(item.customerId, costCents);
       if (!success) {
-        // Insufficient balance — still ingest lead, flag in logs
         console.warn(`[SignalAgent] Insufficient credits for customer ${item.customerId}`);
       }
 
@@ -87,6 +140,9 @@ export async function runSignalAgent(): Promise<{
         console.log(`[SignalAgent] LOW BALANCE ALERT: customer ${item.customerId}`);
         lowBalanceAlerts++;
       }
+
+      // Fire auto top-up if configured — non-blocking, errors are caught internally
+      await maybeAutoTopUp(item.customerId);
 
       await db
         .update(sfSignalQueue)

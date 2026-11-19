@@ -5,6 +5,7 @@ import { sfCustomers, sfCreditAccounts, sfSettings } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { paymentProcessor } from "@/lib/payments";
 
 const PLATFORM_FEES: Record<string, number> = {
   floor: 99500,
@@ -70,6 +71,35 @@ export async function createClient(formData: FormData) {
 
   // Create credit account
   await db.insert(sfCreditAccounts).values({ customerId: customer.id });
+
+  // Wire Stripe if configured — create customer + subscription
+  if (paymentProcessor) {
+    try {
+      const stripeCustomerId = await paymentProcessor.ensureCustomer(
+        email,
+        name,
+        customer.id
+      );
+      const sub = await paymentProcessor.createSubscription({
+        processorCustomerId: stripeCustomerId,
+        plan,
+        billingCycle,
+        internalCustomerId: customer.id,
+      });
+      await db
+        .update(sfCustomers)
+        .set({
+          stripeCustomerId,
+          stripeSubscriptionId: sub.processorSubscriptionId,
+          subscriptionStatus: sub.status === "active" ? "active" : "trialing",
+          updatedAt: new Date(),
+        })
+        .where(eq(sfCustomers.id, customer.id));
+    } catch (err) {
+      // Non-fatal: customer is created; Stripe can be wired from the overview page
+      console.error("Stripe setup failed during client creation:", err);
+    }
+  }
 
   revalidatePath("/dashboard");
   redirect(`/dashboard/clients/${customer.id}`);
